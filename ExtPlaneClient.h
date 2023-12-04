@@ -1,82 +1,75 @@
-#ifndef EXTPLANECLIENT_H
-#define EXTPLANECLIENT_H
+/*
+ This file is part of libXPlane-ExtPlane-Client
+ A C++ Library to access X-Plane via the ExtPlane Plugin
 
-#include <QObject>
-#include <QString>
-#include <set>
-#include "clientdataref.h"
-#include "extplaneconnection.h"
-#include "clientdatarefprovider.h"
-#include "simulatedextplaneconnection.h"
+ Copyright (C) 2018 shahada abubakar
+ <shahada@abubakar.net>
 
-/**
- * Represents a single ExtPlane client (client side)
- * Can be simulated or real connection.
- *
- * Call createClient() after creating object.
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License
+ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
  */
-class ExtPlaneClient : public QObject {
-    Q_OBJECT
-    Q_PROPERTY(ClientDataRefProvider *datarefProvider READ datarefProvider NOTIFY datarefProviderChanged)
-    Q_PROPERTY(ExtPlaneConnection *extplaneConnection READ extplaneConnection CONSTANT)
-    Q_PROPERTY(bool simulated READ isSimulated WRITE setSimulated NOTIFY simulatedChanged)
-    Q_PROPERTY(QString connectionMessage READ connectionMessage NOTIFY connectionMessageChanged)
-    Q_PROPERTY(bool connected READ isConnected NOTIFY connectedChanged)
-public:
-    ExtPlaneClient(ExtPlaneClient const&)  = delete;
-    void operator=(ExtPlaneClient const&)  = delete;
-    explicit ExtPlaneClient(bool simulated = false);
-    explicit ExtPlaneClient(QObject *parent, QString name, bool simulated);
-    ~ExtPlaneClient();
-    static ExtPlaneClient &instance();
-    Q_INVOKABLE void createClient(); // MUST be called before use
-    ClientDataRef* subscribeDataRef(QString name, double accuracy=0);
-    void unsubscribeDataRefByName(QString name); // TODO: Shouldn't be used - REMOVE
-    bool isDataRefSubscribed(QString name);
-    void keyPress(int id);
-    void buttonPress(int id);
-    void buttonRelease(int id);
-    void commandOnce(QString name);
-    void commandBegin(QString name);
-    void commandEnd(QString name);
-    bool isSimulated() const;
-    ClientDataRefProvider* datarefProvider() const;
-    ExtPlaneConnection *extplaneConnection();
-    QString connectionMessage();
-    bool isConnected() const;
 
-public slots:
-    void unsubscribeDataRef(ClientDataRef *refToUnsubscribe);
-    void setUpdateInterval(double newInterval);
-    void setSimulated(bool simulated);
+#ifndef LIBXPLANEEXTPLANECLIENT_SRC_EXTPLANECLIENT_H_
+#define LIBXPLANEEXTPLANECLIENT_SRC_EXTPLANECLIENT_H_
 
-signals:
-    void refChanged(QString name, double value);
-    void refChanged(QString name, QString value);
-    void refChanged(QString name, QStringList values);
-    void datarefProviderChanged(ClientDataRefProvider* datarefProvider);
-    void simulatedChanged(bool simulated);
-    void connectionMessageChanged(QString connectionMessage);
-    void extplaneWarning(QString message);
-    void connectedChanged(bool connected);
+#include <syslog.h>
+#include <time.h>
+#include <functional>
 
-private slots:
-    void cdrChanged(ClientDataRef *ref);
-    void valueSet(ClientDataRef *ref);
-    void refDestroyed(QObject* refqo);
-    void setConnectionMessage(QString msg);
+#include "TCPClient.h"
 
-private:
-    QString m_name;
-    std::set<ClientDataRef*> m_dataRefs;
-    std::set<int> m_heldButtons;
-    std::set<QString> m_runningCommands;
-    ClientDataRefProvider *m_connection; // The actual connection class
-    bool m_simulated;
-    ExtPlaneConnection m_extplaneConnection;
-    SimulatedExtPlaneConnection m_simulatedExtplaneConnection;
-    QString m_connectionMessage;
-    static ExtPlaneClient* _instance;
-};
+namespace XPlaneExtPlaneClient {
 
-#endif // EXTPLANECLIENT_H
+	class ExtPlaneClient: public XPlaneExtPlaneClient::TCPClient {
+	private:
+		static ExtPlaneClient * instance;
+
+		bool isRunning = false;
+		int stopRequested = false;
+
+		// callback hooks
+		std::function <void()> onConnectCallback;
+		std::function <void()> onDisconnectCallback;
+		std::function <void (std::string, std::string, std::string)> receivedDataCallback;
+
+	public:
+		ExtPlaneClient (
+				std::string host,
+				int port,
+				std::function <void()> _onConnect,
+				std::function <void()> _onDisconnect,
+				std::function <void (std::string, std::string, std::string)> _receivedData
+		);
+
+		virtual ~ExtPlaneClient();
+
+		void init();
+		void launchThread();
+
+		//virtual void mainLoop(int * exitFlag);
+
+		void sendLine(std::string line);
+		virtual void initConnection(time_t time);
+		virtual void dropConnection(time_t time);
+		void goLoop();
+		virtual void processLine(time_t time, std::string line);
+		virtual void processResponse(time_t time, std::string type,
+				std::string dataref, std::string value);
+	protected:
+
+	};
+
+}
+
+#endif /* PIXPLANEFMCCDU_SRC_EXTPLANECLIENT_H_ */
